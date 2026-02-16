@@ -1,0 +1,25 @@
+lokalise:
+  project_id: "YOUR_PROJECT_ID"
+  api_token_env: "LOKALISE_API_TOKEN"  # env var name (not the token itself)
+
+languages:
+  - iso: "en"
+    lproj: "en.lproj"
+  - iso: "sv"
+    lproj: "sv.lproj"
+
+# where .lproj dirs live
+base_path: "path/to/Resources"
+
+files:
+  - lokalise_filename: "Localizable.strings"
+    local_filename: "Localizable.strings"
+    format: "strings"
+  - lokalise_filename: "Localizable.stringsdict"
+    local_filename: "Localizable.stringsdict"
+    format: "stringsdict"
+
+download:
+  export_empty_as: "base"
+  placeholder_format: "ios"
+  replace_breaks: true
