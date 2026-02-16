@@ -37,6 +37,7 @@ languages:
   - iso: "sv"
     lproj: "sv.lproj"
 
+# where .lproj dirs live
 base_path: "path/to/Resources"
 
 files:
