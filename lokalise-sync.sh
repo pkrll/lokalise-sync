@@ -163,22 +163,28 @@ load_config() {
     fi
 
     PROJECT_ID=$(yq '.lokalise.project_id' "$CONFIG_FILE")
-    local token_env_var
-    token_env_var=$(yq '.lokalise.api_token_env' "$CONFIG_FILE")
+    local token_direct token_env_var
+    token_direct=$(yq '.lokalise.api_token // ""' "$CONFIG_FILE")
+    token_env_var=$(yq '.lokalise.api_token_env // ""' "$CONFIG_FILE")
     BASE_PATH=$(yq '.base_path' "$CONFIG_FILE")
 
     EXPORT_EMPTY_AS=$(yq '.download.export_empty_as // "base"' "$CONFIG_FILE")
     PLACEHOLDER_FORMAT=$(yq '.download.placeholder_format // "ios"' "$CONFIG_FILE")
     REPLACE_BREAKS=$(yq '.download.replace_breaks // true' "$CONFIG_FILE")
 
-    # Resolve API token from env var
-    if [[ -z "$token_env_var" || "$token_env_var" == "null" ]]; then
-        log_error "Config must specify lokalise.api_token_env"
-        exit $EXIT_CONFIG_ERROR
-    fi
-    API_TOKEN="${(P)token_env_var:-}"
-    if [[ -z "$API_TOKEN" ]]; then
-        log_error "Environment variable '$token_env_var' is not set or empty"
+    # Resolve API token: direct value takes precedence over env var
+    if [[ -n "$token_direct" && "$token_direct" != "null" ]]; then
+        API_TOKEN="$token_direct"
+        log_debug "Using api_token from config file"
+    elif [[ -n "$token_env_var" && "$token_env_var" != "null" ]]; then
+        API_TOKEN="${(P)token_env_var:-}"
+        if [[ -z "$API_TOKEN" ]]; then
+            log_error "Environment variable '$token_env_var' is not set or empty"
+            exit $EXIT_CONFIG_ERROR
+        fi
+        log_debug "Using api_token from env var: $token_env_var"
+    else
+        log_error "Config must specify either lokalise.api_token or lokalise.api_token_env"
         exit $EXIT_CONFIG_ERROR
     fi
 

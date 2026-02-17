@@ -20,7 +20,7 @@ ln -s "$(pwd)/lokalise-sync.sh" /usr/local/bin/lokalise-sync
 
 ## Setup
 
-1. Set your Lokalise API token:
+1. Set your Lokalise API token, either directly in the config file or as an env var:
 ```bash
 export LOKALISE_API_TOKEN="your-token-here"
 ```
@@ -29,7 +29,10 @@ export LOKALISE_API_TOKEN="your-token-here"
 ```yaml
 lokalise:
   project_id: "YOUR_PROJECT_ID"
-  api_token_env: "LOKALISE_API_TOKEN" # env var name (not the token itself)
+  # Option 1: reference an env var (recommended — keeps secrets out of the file)
+  api_token_env: "LOKALISE_API_TOKEN"
+  # Option 2: hardcode the token directly (overrides api_token_env if both are set)
+  # api_token: "your-actual-token-here"
 
 languages:
   - iso: "en"
