@@ -76,7 +76,7 @@ EXAMPLES:
     ./lokalise-sync.sh --tag "sprint-42"
     ./lokalise-sync.sh --dry-run --langs sv,en "onboarding.welcome"
     ./lokalise-sync.sh --backup -f "Localizable.strings" "settings.title"
-    ./lokalise-sync.sh "payment_cards_transaction_status_*"
+    ./lokalise-sync.sh "login.*"
 HELP
 }
 
