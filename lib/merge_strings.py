@@ -10,6 +10,7 @@ Handles UTF-16 encoded files automatically.
 """
 import argparse
 import bisect
+from fnmatch import fnmatch
 import json
 import os
 import re
@@ -56,13 +57,13 @@ def main():
 
     filter_keys = None
     if args.keys_json:
-        filter_keys = set(json.loads(args.keys_json))
+        filter_keys = json.loads(args.keys_json)
 
     source_text, _ = detect_and_read(args.source)
     source_pairs = parse_strings(source_text)
 
     if filter_keys is not None:
-        source_pairs = [(k, v) for k, v in source_pairs if k in filter_keys]
+        source_pairs = [(k, v) for k, v in source_pairs if any(fnmatch(k, p) for p in filter_keys)]
 
     if not source_pairs:
         print("[INFO]  No matching keys found in source")

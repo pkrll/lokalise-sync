@@ -7,6 +7,7 @@ Usage:
 Uses plistlib for robust plist manipulation.
 """
 import argparse
+from fnmatch import fnmatch
 import json
 import os
 import plistlib
@@ -28,8 +29,8 @@ def main():
 
     # Filter to specific keys if provided
     if args.keys_json:
-        keys_to_keep = set(json.loads(args.keys_json))
-        source_data = {k: v for k, v in source_data.items() if k in keys_to_keep}
+        keys_to_keep = json.loads(args.keys_json)
+        source_data = {k: v for k, v in source_data.items() if any(fnmatch(k, p) for p in keys_to_keep)}
 
     if not source_data:
         print("[INFO]  No matching stringsdict keys found in source")

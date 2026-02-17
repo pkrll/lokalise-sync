@@ -57,7 +57,8 @@ USAGE:
     ./lokalise-sync.sh [OPTIONS] [KEY_NAMES...]
 
 ARGUMENTS:
-    KEY_NAMES...              Keys to download (omit for full sync)
+    KEY_NAMES...              Keys to download (omit for full sync).
+                              Supports wildcards: "prefix_*" resolves via API.
 
 OPTIONS:
     -c, --config FILE         Config file path (default: ./.lokalise-sync.yml)
@@ -75,6 +76,7 @@ EXAMPLES:
     ./lokalise-sync.sh --tag "sprint-42"
     ./lokalise-sync.sh --dry-run --langs sv,en "onboarding.welcome"
     ./lokalise-sync.sh --backup -f "Localizable.strings" "settings.title"
+    ./lokalise-sync.sh "payment_cards_transaction_status_*"
 HELP
 }
 
@@ -230,6 +232,134 @@ validate_config() {
         log_error "base_path directory does not exist: $BASE_PATH"
         exit $EXIT_CONFIG_ERROR
     fi
+}
+
+# ─── Wildcard Resolution ─────────────────────────────────────────────────────
+
+resolve_wildcards() {
+    # Check if any key contains a wildcard
+    local has_wildcard=false
+    for key in "${KEY_NAMES[@]}"; do
+        if [[ "$key" == *'*'* ]]; then
+            has_wildcard=true
+            break
+        fi
+    done
+
+    if ! $has_wildcard; then
+        log_debug "No wildcard patterns found, skipping key resolution"
+        return
+    fi
+
+    # Separate exact keys from wildcard patterns
+    local -a exact_keys=()
+    local -a wildcard_patterns=()
+    for key in "${KEY_NAMES[@]}"; do
+        if [[ "$key" == *'*'* ]]; then
+            wildcard_patterns+=("$key")
+        else
+            exact_keys+=("$key")
+        fi
+    done
+
+    log_info "Resolving ${#wildcard_patterns[@]} wildcard pattern(s) via API..."
+
+    # Fetch all key names from the project using cursor pagination
+    local -a all_key_names=()
+    local cursor="" page=1
+    local url response_file header_file http_code key_count jq_output next_cursor
+    local -a page_keys=()
+
+    while true; do
+        url="${LOKALISE_API_BASE}/${PROJECT_ID}/keys?limit=500&pagination=cursor&include_translations=0"
+        if [[ -n "$cursor" ]]; then
+            url="${url}&cursor=${cursor}"
+        fi
+
+        log_debug "Fetching keys page $page (url: $url)..."
+
+        response_file=$(mktemp)
+        header_file=$(mktemp)
+
+        http_code=$(curl -s -w "%{http_code}" -o "$response_file" -D "$header_file" \
+            -X GET \
+            -H "x-api-token: $API_TOKEN" \
+            -H "Accept: application/json" \
+            "$url")
+
+        if [[ "$http_code" -ne 200 ]]; then
+            log_error "List Keys API request failed (HTTP $http_code)"
+            log_error "Response: $(<"$response_file")"
+            rm -f "$response_file" "$header_file"
+            exit $EXIT_API_ERROR
+        fi
+
+        log_debug "Response body (first 500 chars): $(head -c 500 "$response_file")"
+
+        # Skip empty pages
+        key_count=$(jq '.keys | length' "$response_file")
+        if [[ "$key_count" -eq 0 ]]; then
+            rm -f "$response_file" "$header_file"
+            break
+        fi
+
+        # Extract key names — handle both object and string key_name formats
+        jq_output=$(jq -r '.keys[] | if (.key_name | type) == "object" then .key_name.ios else .key_name end' "$response_file" 2>&1) || {
+            log_debug "jq extraction failed: $jq_output"
+            rm -f "$response_file" "$header_file"
+            break
+        }
+
+        page_keys=()
+        if [[ -n "$jq_output" ]]; then
+            page_keys=("${(@f)jq_output}")
+        fi
+        all_key_names+=("${page_keys[@]}")
+
+        log_debug "Page $page: fetched ${#page_keys[@]} keys"
+
+        # Read next cursor from response header
+        next_cursor=$(grep -i 'X-Pagination-Next-Cursor' "$header_file" 2>/dev/null | sed 's/.*: *//;s/\r$//' || true)
+
+        rm -f "$response_file" "$header_file"
+
+        if [[ -z "$next_cursor" ]]; then
+            break
+        fi
+
+        cursor="$next_cursor"
+        (( page++ ))
+    done
+
+    log_info "Fetched ${#all_key_names[@]} total keys from project"
+
+    # Match wildcard patterns against fetched keys
+    local -a resolved_keys=()
+    for pattern in "${wildcard_patterns[@]}"; do
+        local match_count=0
+        for name in "${all_key_names[@]}"; do
+            if [[ "$name" == ${~pattern} ]]; then
+                resolved_keys+=("$name")
+                (( ++match_count ))
+            fi
+        done
+        if [[ $match_count -eq 0 ]]; then
+            log_warn "Pattern '$pattern' matched 0 keys"
+        else
+            log_info "Pattern '$pattern' matched $match_count key(s)"
+        fi
+    done
+
+    # Combine exact keys with resolved wildcard keys
+    KEY_NAMES=("${exact_keys[@]}" "${resolved_keys[@]}")
+
+    if [[ ${#KEY_NAMES[@]} -eq 0 ]]; then
+        log_error "No keys resolved from wildcard patterns — nothing to sync"
+        exit $EXIT_CONFIG_ERROR
+    fi
+
+    log_info "Resolved to ${#KEY_NAMES[@]} total key(s)"
+    log_debug "Resolved keys: ${KEY_NAMES[*]}"
 }
 
 # ─── Cleanup ──────────────────────────────────────────────────────────────────
@@ -458,6 +588,7 @@ main() {
     check_dependencies
     load_config
     validate_config
+    resolve_wildcards
 
     if [[ ${#KEY_NAMES[@]} -eq 0 && -z "$TAG" ]]; then
         log_info "No keys or tag specified — performing full sync"

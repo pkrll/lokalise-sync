@@ -63,6 +63,12 @@ lokalise-sync "login.title" "login.subtitle"
 # Sync by tag
 lokalise-sync --tag "sprint-42"
 
+# Wildcard — sync all keys matching a prefix
+lokalise-sync "payment_cards_transaction_status_*"
+
+# Mix exact keys and wildcards
+lokalise-sync "login.title" "payment_cards_*"
+
 # Preview without modifying files
 lokalise-sync --dry-run "some.key"
 
